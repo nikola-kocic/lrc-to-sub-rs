@@ -23,10 +23,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
     let mut current_line = lrc.timings[1].line_index;
     let mut line_start = lrc.timings[1].time;
     let mut line_end = lrc.timings[1].time;
+    let mut karaoke_text = Vec::new();
 
-    for timing in lrc.timings.iter().skip(2) {
+    for timing_pairs in lrc.timings.windows(2) {
+        let timing = &timing_pairs[0];
+        let timing_next = &timing_pairs[1];
+
         if timing.line_index > current_line {
-            let mut line_display_start = line_start
+            let line_display_start = line_start
                 .checked_sub(Duration::from_secs_f32(2.0))
                 .unwrap_or(Duration::ZERO);
             // if line_display_start.
@@ -34,13 +38,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
                 "Dialogue: 1,0:{},0:{},Jap,,0,0,0,,{{\\k200}}{}",
                 format_duration(&line_display_start),
                 format_duration(&line_end),
-                lrc.lines[current_line as usize]
+                karaoke_text.join("")//lrc.lines[current_line as usize]
             );
             println!("{}", s);
             // Now set up next line
+            karaoke_text.clear();
             line_start = timing.time;
             current_line = timing.line_index;
+            // println!("{}", &lrc.lines[current_line]);
         }
         line_end = timing.time;
+        let duration = timing_next.time - line_end;
+        let duration_centisec = duration.as_millis() / 10;
+        let line = &lrc.lines[current_line];
+        // println!("{:?}", timing);
+        if timing.line_char_from_index != timing.line_char_to_index {
+            let karaoke_segment = format!("{{\\k{}}}{}", duration_centisec, line.get(timing.line_char_from_index..timing.line_char_to_index).unwrap());
+            // println!("{}", karaoke_segment);
+            karaoke_text.push(karaoke_segment);
+        }
     }
 }

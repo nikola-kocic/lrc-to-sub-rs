@@ -19,8 +19,8 @@ fn lines_from_file<P: AsRef<Path>>(filepath: P) -> Result<Vec<String>, String> {
 
 struct TimedLocation {
     time: Duration,
-    line_char_from_index: i32, // from this character in line
-    line_char_to_index: i32,   // to this character in line
+    line_char_from_index: usize, // from this character in line
+    line_char_to_index: usize,   // to this character in line
 }
 
 impl fmt::Debug for TimedLocation {
@@ -136,11 +136,11 @@ fn parse_lrc_line(line: String) -> Result<LrcLine, String> {
                 let tag_content = subparts
                     .next()
                     .expect("Should never happen; split always returns at least one element");
-                let mut text_len: i32 = 0;
+                let mut text_len: usize = 0;
 
                 if let Some(text) = subparts.next() {
                     texts.push(text);
-                    text_len = text.bytes().len().try_into().unwrap();
+                    text_len = text.bytes().len();
                 }
 
                 match parse_tag(tag_content)? {
@@ -192,7 +192,10 @@ pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
                 }
                 timed_texts_lines.push(t);
             }
-            LrcLine::Tag(Tag::Offset(v)) => offset_ms = v,
+            LrcLine::Tag(Tag::Offset(v)) => {
+                offset_ms = v;
+                debug!("Applying offset {}", offset_ms);
+            },
             _ => {}
         }
     }
@@ -205,9 +208,9 @@ pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LyricsTiming {
     pub time: Duration,            // time in song at which this occurs
-    pub line_index: i32,           // index of line
-    pub line_char_from_index: i32, // from this character in line
-    pub line_char_to_index: i32,   // to this character in line
+    pub line_index: usize,           // index of line
+    pub line_char_from_index: usize, // from this character in line
+    pub line_char_to_index: usize,   // to this character in line
 }
 
 #[derive(Debug)]
@@ -230,7 +233,7 @@ impl Lyrics {
             });
         }
 
-        for (line_index, timed_text_line) in (0i32..).zip(lrc_file.timed_texts_lines) {
+        for (line_index, timed_text_line) in (0usize..).zip(lrc_file.timed_texts_lines) {
             lines.push(timed_text_line.text);
             for timing in timed_text_line.timings {
                 timings.push(LyricsTiming {
