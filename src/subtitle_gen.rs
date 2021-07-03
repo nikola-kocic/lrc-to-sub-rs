@@ -6,11 +6,15 @@ use crate::formatters::format_duration;
 use crate::lrc::Lyrics;
 use crate::lrc::LyricsTiming;
 
+const DEFAULT_PREDISPLAY_DURATION: Duration = Duration::from_secs(2);
+
+#[derive(Debug)]
 struct KaraokeLineSegment {
     duration: Duration,
     text: String,
 }
 
+#[derive(Debug)]
 struct KaraokeLine {
     line_display_start: Duration,
     line_display_end: Duration,
@@ -45,7 +49,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
             line_segments_strings.push(line_segments_string);
         }
         ass_lines.push(format!(
-            "Dialogue: 1,0:{},0:{},Jap,,0,0,0,,{{\\k200}}{}",
+            "Dialogue: 1,0:{},0:{},Jap,,0,0,0,,{}",
             format_duration(&karaoke_line.line_display_start),
             format_duration(&karaoke_line.line_display_end),
             line_segments_strings.join("")
@@ -59,19 +63,23 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
     let mut karaoke_line_segments = Vec::new();
     let line_start = timings_for_line.first().unwrap().time;
     let line_end = timings_for_line.last().unwrap().time;
+
+    let predisplay_duration = std::cmp::min(line_start, DEFAULT_PREDISPLAY_DURATION);
+    karaoke_line_segments.push(KaraokeLineSegment {
+        duration: predisplay_duration,
+        text: String::new(),
+    });
+
     for timing in timings_for_line {
         // println!("timing = {:?}", timing);
-        if timing.line_char_from_index != timing.line_char_to_index {
-            let karaoke_segment = KaraokeLineSegment {
-                duration: timing.duration,
-                text: line
-                    .get(timing.line_char_from_index..timing.line_char_to_index)
-                    .unwrap()
-                    .to_owned(),
-            };
-            // println!("{}", karaoke_segment);
-            karaoke_line_segments.push(karaoke_segment);
-        }
+        let karaoke_segment = KaraokeLineSegment {
+            duration: timing.duration,
+            text: line
+                .get(timing.line_char_from_index..timing.line_char_to_index)
+                .unwrap()
+                .to_owned(),
+        };
+        karaoke_line_segments.push(karaoke_segment);
     }
     let line_display_start = line_start
         .checked_sub(Duration::from_secs_f32(2.0))
@@ -79,7 +87,7 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
     KaraokeLine {
         line_display_start,
         line_display_end: line_end,
-        line_segments: karaoke_line_segments.split_off(0),
+        line_segments: karaoke_line_segments,
     }
 }
 
