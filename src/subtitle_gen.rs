@@ -1,10 +1,18 @@
+use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::formatters::format_duration;
 use crate::lrc::Lyrics;
 
-pub fn f(lrc: &Lyrics) {
-    println!(r#"[Script Info]
+struct KaraokeLine {
+    line_display_start: Duration,
+    line_display_end: Duration,
+    karaoke_text: String,
+}
+
+fn generate_ass_file(karaoke_lines: Vec<KaraokeLine>) -> Vec<String> {
+    let prefix = r#"[Script Info]
 ; This is a Sub Station Alpha v4 script.
 Title: 
 ScriptType: v4.00+
@@ -18,12 +26,28 @@ Style: Jap,Arial,20,&H00FFFFFF,&H000088EF,&H00000000,&H00666666,-1,0,0,0,100,100
 Style: Eng,Arial,20,&H00FFFFFF,&H000088EF,&H00000000,&H00666666,-1,0,0,0,100,100,0,0,1,3,0,2,10,10,10,1
 
 [Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"#);
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"#;
+    let mut ass_lines = prefix
+        .split("\n")
+        .map(|s| String::from(s))
+        .collect::<Vec<String>>();
+    for karaoke_line in karaoke_lines {
+        ass_lines.push(format!(
+            "Dialogue: 1,0:{},0:{},Jap,,0,0,0,,{{\\k200}}{}",
+            format_duration(&karaoke_line.line_display_start),
+            format_duration(&karaoke_line.line_display_end),
+            karaoke_line.karaoke_text
+        ));
+    }
+    ass_lines
+}
 
+pub fn f(lrc: &Lyrics, out: &PathBuf) -> Result<(), String> {
     let mut current_line = lrc.timings[1].line_index;
     let mut line_start = lrc.timings[1].time;
     let mut line_end = lrc.timings[1].time;
-    let mut karaoke_text = Vec::new();
+    let mut karaoke_line_text_segments = Vec::new();
+    let mut karaoke_lines = Vec::new();
 
     for timing_pairs in lrc.timings.windows(2) {
         let timing = &timing_pairs[0];
@@ -33,16 +57,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
             let line_display_start = line_start
                 .checked_sub(Duration::from_secs_f32(2.0))
                 .unwrap_or(Duration::ZERO);
-            // if line_display_start.
-            let s = format!(
-                "Dialogue: 1,0:{},0:{},Jap,,0,0,0,,{{\\k200}}{}",
-                format_duration(&line_display_start),
-                format_duration(&line_end),
-                karaoke_text.join("")//lrc.lines[current_line as usize]
-            );
-            println!("{}", s);
+            karaoke_lines.push(KaraokeLine {
+                line_display_start,
+                line_display_end: line_end,
+                karaoke_text: karaoke_line_text_segments.join(""),
+            });
             // Now set up next line
-            karaoke_text.clear();
+            karaoke_line_text_segments.clear();
             line_start = timing.time;
             current_line = timing.line_index;
             // println!("{}", &lrc.lines[current_line]);
@@ -53,9 +74,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
         let line = &lrc.lines[current_line];
         // println!("{:?}", timing);
         if timing.line_char_from_index != timing.line_char_to_index {
-            let karaoke_segment = format!("{{\\k{}}}{}", duration_centisec, line.get(timing.line_char_from_index..timing.line_char_to_index).unwrap());
+            let karaoke_segment = format!(
+                "{{\\k{}}}{}",
+                duration_centisec,
+                line.get(timing.line_char_from_index..timing.line_char_to_index)
+                    .unwrap()
+            );
             // println!("{}", karaoke_segment);
-            karaoke_text.push(karaoke_segment);
+            karaoke_line_text_segments.push(karaoke_segment);
         }
     }
+
+    let ass_lines = generate_ass_file(karaoke_lines);
+    fs::write(out, ass_lines.join("\n"))
+        .map_err(|e| format!("Cannot write to {:?}: {}", out, e))?;
+    Ok(())
 }

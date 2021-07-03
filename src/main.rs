@@ -3,15 +3,13 @@ mod lrc;
 mod subtitle_gen;
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 use structopt::StructOpt;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 
-use crate::formatters::format_duration;
-use crate::lrc::{parse_lrc_file, Lyrics, LyricsTiming};
+use crate::lrc::{parse_lrc_file, Lyrics};
 use crate::subtitle_gen::f;
 
 /// Show lyrics
@@ -21,14 +19,18 @@ struct Opt {
     /// Lyrics file to use.
     #[structopt(short = "l", long, parse(from_os_str))]
     lyrics: PathBuf,
+
+    /// Subtitle file path to write output to.
+    #[structopt(short = "o", long, parse(from_os_str))]
+    out: PathBuf,
 }
 
-fn run(lrc_filepath: PathBuf) -> Result<(), String> {
+fn run(lrc_filepath: PathBuf, out: PathBuf) -> Result<(), String> {
     let lrc_file = parse_lrc_file(&lrc_filepath)
         .map_err(|e| format!("Parsing lrc file {:?} failed: {}", lrc_filepath, e))?;
     let lyrics = Lyrics::new(lrc_file);
     // println!("{:?}", lyrics);
-    f(&lyrics);
+    f(&lyrics, &out)?;
     Ok(())
 }
 
@@ -45,7 +47,7 @@ fn main() {
         error!("Lyrics path must be a file");
         return;
     }
-    if let Err(s) = run(lyrics_filepath) {
+    if let Err(s) = run(lyrics_filepath, opt.out) {
         error!("{}", s);
     }
 }

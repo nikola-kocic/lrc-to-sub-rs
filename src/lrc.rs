@@ -195,7 +195,7 @@ pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
             LrcLine::Tag(Tag::Offset(v)) => {
                 offset_ms = v;
                 debug!("Applying offset {}", offset_ms);
-            },
+            }
             _ => {}
         }
     }
@@ -207,7 +207,7 @@ pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LyricsTiming {
-    pub time: Duration,            // time in song at which this occurs
+    pub time: Duration,              // time in song at which this occurs
     pub line_index: usize,           // index of line
     pub line_char_from_index: usize, // from this character in line
     pub line_char_to_index: usize,   // to this character in line
