@@ -237,21 +237,13 @@ pub struct Lyrics {
 
 impl Lyrics {
     pub fn new(lrc_file: LrcFile) -> Self {
-        let mut timings = Vec::new();
+        let mut timings: Vec<LyricsTiming> = Vec::new();
         let mut src_lines_with_timings = HashSet::new();
         let mut lrc_lines = Vec::new();
 
         trace!("Parsed lines: {:#?}", lrc_file.lines);
 
         if !lrc_file.timed_texts_lines.is_empty() {
-            timings.push(LyricsTiming {
-                time: Duration::ZERO,
-                duration: Duration::ZERO,
-                line_index: 0,
-                line_char_from_index: 0,
-                line_char_to_index: 0,
-            });
-
             for timing in lrc_file.timed_texts_lines {
                 if let Some(prev_timing) = timings.last_mut() {
                     prev_timing.duration = timing
