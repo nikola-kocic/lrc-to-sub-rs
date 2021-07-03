@@ -2,6 +2,9 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
+#[allow(unused_imports)]
+use log::{debug, error, info, trace, warn};
+
 use crate::formatters::format_duration;
 use crate::lrc::Lyrics;
 use crate::lrc::LyricsTiming;
@@ -59,7 +62,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
 }
 
 fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> KaraokeLine {
-    // println!("generate_karaoke_line");
     let mut karaoke_line_segments = Vec::new();
     let line_start = timings_for_line.first().unwrap().time;
     let line_end = timings_for_line.last().unwrap().time;
@@ -71,7 +73,7 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
     });
 
     for timing in timings_for_line {
-        // println!("timing = {:?}", timing);
+        trace!("timing = {:?}", timing);
         let karaoke_segment = KaraokeLineSegment {
             duration: timing.duration,
             text: line
@@ -79,6 +81,7 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
                 .unwrap()
                 .to_owned(),
         };
+        trace!("karaoke_segment = {:?}", karaoke_segment);
         karaoke_line_segments.push(karaoke_segment);
     }
     let line_display_start = line_start

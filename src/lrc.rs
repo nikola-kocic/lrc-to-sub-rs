@@ -241,6 +241,8 @@ impl Lyrics {
         let mut src_lines_with_timings = HashSet::new();
         let mut lrc_lines = Vec::new();
 
+        trace!("Parsed lines: {:#?}", lrc_file.lines);
+
         if !lrc_file.timed_texts_lines.is_empty() {
             timings.push(LyricsTiming {
                 time: Duration::ZERO,
