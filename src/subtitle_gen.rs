@@ -35,8 +35,8 @@ struct KaraokeLineSegment {
 
 #[derive(Debug)]
 struct KaraokeLine {
-    line_display_start: Duration,
-    line_display_end: Duration,
+    line_start: Duration,
+    line_end: Duration,
     line_segments: Vec<KaraokeLineSegment>,
 }
 
@@ -50,23 +50,31 @@ fn generate_ass_file(karaoke_lines: Vec<KaraokeLine>) -> Vec<String> {
         .split('\n')
         .map(String::from)
         .collect::<Vec<String>>();
-    for karaoke_line in karaoke_lines {
+    for (i, karaoke_line) in karaoke_lines.iter().enumerate() {
+        trace!("writing ASS file from = {:?}", karaoke_line);
         let mut line_segments_strings = Vec::new();
-        let predisplay_duration = std::cmp::min(
-            &karaoke_line.line_display_start,
-            &DEFAULT_PREDISPLAY_DURATION,
-        );
-        line_segments_strings.push(format_text_duration(predisplay_duration, ""));
+        let predisplay_duration = {
+            let first_min = if i < 2
+                || karaoke_line.line_start - DEFAULT_PREDISPLAY_DURATION
+                    > karaoke_lines[i - 2].line_end
+            {
+                karaoke_line.line_start
+            } else {
+                karaoke_line.line_start - karaoke_lines[i - 2].line_end
+            };
+            std::cmp::min(first_min, DEFAULT_PREDISPLAY_DURATION)
+        };
+        line_segments_strings.push(format_text_duration(&predisplay_duration, ""));
 
-        for line_segment in karaoke_line.line_segments {
+        for line_segment in &karaoke_line.line_segments {
             let line_segments_string =
                 format_text_duration(&line_segment.duration, &line_segment.text);
             line_segments_strings.push(line_segments_string);
         }
         ass_lines.push(format!(
             "Dialogue: 1,0:{},0:{},Jap,,0,0,0,,{}",
-            format_duration(&karaoke_line.line_display_start),
-            format_duration(&karaoke_line.line_display_end),
+            format_duration(&(karaoke_line.line_start - predisplay_duration)),
+            format_duration(&karaoke_line.line_end),
             line_segments_strings.join("")
         ));
     }
@@ -90,12 +98,9 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
         trace!("karaoke_segment = {:?}", karaoke_segment);
         karaoke_line_segments.push(karaoke_segment);
     }
-    let line_display_start = line_start
-        .checked_sub(Duration::from_secs_f32(2.0))
-        .unwrap_or(Duration::ZERO);
     KaraokeLine {
-        line_display_start,
-        line_display_end: line_end,
+        line_start,
+        line_end,
         line_segments: karaoke_line_segments,
     }
 }
