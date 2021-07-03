@@ -254,10 +254,13 @@ impl Lyrics {
 
             for timing in lrc_file.timed_texts_lines {
                 if let Some(prev_timing) = timings.last_mut() {
-                    prev_timing.duration = timing.time.checked_sub(prev_timing.time).unwrap_or_else(|| {
-                        warn!("Wrong timings for {:?} and {:?}", prev_timing, timing);
-                        Duration::ZERO
-                    });
+                    prev_timing.duration = timing
+                        .time
+                        .checked_sub(prev_timing.time)
+                        .unwrap_or_else(|| {
+                            warn!("Wrong timings for {:?} and {:?}", prev_timing, timing);
+                            Duration::ZERO
+                        });
                 }
                 src_lines_with_timings.insert(timing.source_line_index);
 

@@ -11,21 +11,7 @@ use crate::lrc::LyricsTiming;
 
 const DEFAULT_PREDISPLAY_DURATION: Duration = Duration::from_secs(2);
 
-#[derive(Debug)]
-struct KaraokeLineSegment {
-    duration: Duration,
-    text: String,
-}
-
-#[derive(Debug)]
-struct KaraokeLine {
-    line_display_start: Duration,
-    line_display_end: Duration,
-    line_segments: Vec<KaraokeLineSegment>,
-}
-
-fn generate_ass_file(karaoke_lines: Vec<KaraokeLine>) -> Vec<String> {
-    let prefix = r#"[Script Info]
+const ASS_CONTENT_PREFIX: &str = r#"[Script Info]
 ; This is a Sub Station Alpha v4 script.
 Title: 
 ScriptType: v4.00+
@@ -40,15 +26,41 @@ Style: Eng,Arial,20,&H00FFFFFF,&H000088EF,&H00000000,&H00666666,-1,0,0,0,100,100
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"#;
-    let mut ass_lines = prefix
+
+#[derive(Debug)]
+struct KaraokeLineSegment {
+    duration: Duration,
+    text: String,
+}
+
+#[derive(Debug)]
+struct KaraokeLine {
+    line_display_start: Duration,
+    line_display_end: Duration,
+    line_segments: Vec<KaraokeLineSegment>,
+}
+
+fn format_text_duration(duration: &Duration, text: &str) -> String {
+    let duration_centisec = duration.as_millis() / 10;
+    format!("{{\\k{}}}{}", duration_centisec, text)
+}
+
+fn generate_ass_file(karaoke_lines: Vec<KaraokeLine>) -> Vec<String> {
+    let mut ass_lines = ASS_CONTENT_PREFIX
         .split('\n')
         .map(String::from)
         .collect::<Vec<String>>();
     for karaoke_line in karaoke_lines {
         let mut line_segments_strings = Vec::new();
+        let predisplay_duration = std::cmp::min(
+            &karaoke_line.line_display_start,
+            &DEFAULT_PREDISPLAY_DURATION,
+        );
+        line_segments_strings.push(format_text_duration(predisplay_duration, ""));
+
         for line_segment in karaoke_line.line_segments {
-            let duration_centisec = line_segment.duration.as_millis() / 10;
-            let line_segments_string = format!("{{\\k{}}}{}", duration_centisec, line_segment.text);
+            let line_segments_string =
+                format_text_duration(&line_segment.duration, &line_segment.text);
             line_segments_strings.push(line_segments_string);
         }
         ass_lines.push(format!(
@@ -65,12 +77,6 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
     let mut karaoke_line_segments = Vec::new();
     let line_start = timings_for_line.first().unwrap().time;
     let line_end = timings_for_line.last().unwrap().time;
-
-    let predisplay_duration = std::cmp::min(line_start, DEFAULT_PREDISPLAY_DURATION);
-    karaoke_line_segments.push(KaraokeLineSegment {
-        duration: predisplay_duration,
-        text: String::new(),
-    });
 
     for timing in timings_for_line {
         trace!("timing = {:?}", timing);
