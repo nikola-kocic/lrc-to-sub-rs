@@ -64,10 +64,8 @@ fn generate_karaoke_lines(lrc: &Lyrics) -> Vec<KaraokeLine> {
     let mut karaoke_line_segments = Vec::new();
     let mut karaoke_lines = Vec::new();
 
-    for timing_pairs in lrc.timings.windows(2) {
-        let timing = &timing_pairs[0];
-        let timing_next = &timing_pairs[1];
-
+    // println!("lines = \"{:?}\"", lrc.lines);
+    for timing in &lrc.timings {
         if timing.line_index > current_line {
             let line_display_start = line_start
                 .checked_sub(Duration::from_secs_f32(2.0))
@@ -84,12 +82,13 @@ fn generate_karaoke_lines(lrc: &Lyrics) -> Vec<KaraokeLine> {
             // println!("{}", &lrc.lines[current_line]);
         }
         line_end = timing.time;
-        let duration = timing_next.time - line_end;
+        // let duration = timing_next.time - line_end;
         let line = &lrc.lines[current_line];
-        // println!("{:?}", timing);
+        // println!("line = \"{}\"", line);
         if timing.line_char_from_index != timing.line_char_to_index {
+            // println!("{:?}", timing);
             let karaoke_segment = KaraokeLineSegment {
-                duration,
+                duration: timing.duration,
                 text: line.get(timing.line_char_from_index..timing.line_char_to_index)
                     .unwrap().to_owned()
             };

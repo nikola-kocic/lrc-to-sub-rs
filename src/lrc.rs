@@ -19,6 +19,7 @@ fn lines_from_file<P: AsRef<Path>>(filepath: P) -> Result<Vec<String>, String> {
 
 struct TimedLocation {
     time: Duration,
+    line_index: usize,
     line_char_from_index: usize, // from this character in line
     line_char_to_index: usize,   // to this character in line
 }
@@ -36,12 +37,6 @@ impl fmt::Debug for TimedLocation {
 }
 
 #[derive(Debug)]
-struct TimedText {
-    text: String,
-    timings: Vec<TimedLocation>,
-}
-
-#[derive(Debug)]
 enum Tag {
     Time(std::time::Duration),
     Offset(i64), // ms
@@ -49,16 +44,17 @@ enum Tag {
 }
 
 #[derive(Debug)]
-enum LrcLine {
-    Empty,
-    TimedText(TimedText),
+enum LrcElement {
+    Text(String),
+    TimedLocation(TimedLocation),
     Tag(Tag),
 }
 
 #[derive(Debug)]
 pub struct LrcFile {
     metadata: Vec<(String, String)>,
-    timed_texts_lines: Vec<TimedText>,
+    lines: Vec<String>,
+    timed_texts_lines: Vec<TimedLocation>,
 }
 
 fn duration_from_time_string(time_str: &str) -> Result<Duration, String> {
@@ -122,14 +118,14 @@ fn parse_tag(tag_content: &str) -> Result<Tag, String> {
     }
 }
 
-fn parse_lrc_line(line: String) -> Result<LrcLine, String> {
+fn parse_lrc_line(line: String, line_index: usize) -> Result<Vec<LrcElement>, String> {
+    let mut line_elements = Vec::new();
     trace!("Parsing line {}", line);
     match line.chars().next() {
-        None => Ok(LrcLine::Empty),
+        None => {},
         Some('[') => {
             let mut current_text_index_in_line = 0;
             let parts = line.split('[');
-            let mut timings = Vec::new();
             let mut texts = Vec::new();
             for part in parts.skip(1) {
                 let mut subparts = part.split(']');
@@ -139,48 +135,57 @@ fn parse_lrc_line(line: String) -> Result<LrcLine, String> {
                 let mut text_len: usize = 0;
 
                 if let Some(text) = subparts.next() {
-                    texts.push(text);
                     text_len = text.bytes().len();
+                    texts.push(text);
                 }
 
                 match parse_tag(tag_content)? {
                     Tag::Time(time) => {
                         let location = TimedLocation {
                             time,
+                            line_index,
                             line_char_from_index: current_text_index_in_line,
                             line_char_to_index: current_text_index_in_line + text_len,
                         };
-                        timings.push(location);
+                        line_elements.push(LrcElement::TimedLocation(location));
                         current_text_index_in_line += text_len;
                     }
-                    tag => return Ok(LrcLine::Tag(tag)),
+                    tag => line_elements.push(LrcElement::Tag(tag)),
                 }
             }
-            let text = texts.join("");
-            Ok(LrcLine::TimedText(TimedText { text, timings }))
+            if !texts.is_empty() {
+                let text = texts.join("");
+                line_elements.push(LrcElement::Text(text))
+            }
         }
         Some(c) => {
             let mut buf = [0; 10];
-            Err(format!(
+            return Err(format!(
                 "Invalid lrc file format. First character in line: \"{}\" (hex bytes: {:x?})",
                 c,
                 c.encode_utf8(&mut buf).as_bytes()
             ))
         }
     }
+    Ok(line_elements)
 }
 
 pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
     let text_lines = lines_from_file(filepath)?;
     let mut timed_texts_lines = Vec::new();
     let mut offset_ms = 0i64;
+    let mut lrc_lines = Vec::new();
     for line in text_lines {
-        match parse_lrc_line(line)? {
-            LrcLine::TimedText(mut t) => {
-                if offset_ms != 0 {
-                    for timing in &mut t.timings {
-                        let prev_time_ms: i64 = timing.time.as_millis().try_into().unwrap();
-                        timing.time = Duration::from_millis(
+        let line_elements = parse_lrc_line(line, lrc_lines.len())?;
+        for line_element in line_elements {
+            match line_element {
+                LrcElement::Text(t) => {
+                    lrc_lines.push(t)
+                }
+                LrcElement::TimedLocation(mut l) => {
+                    if offset_ms != 0 {
+                        let prev_time_ms: i64 = l.time.as_millis().try_into().unwrap();
+                        l.time = Duration::from_millis(
                             (prev_time_ms + offset_ms).try_into().map_err(|_| {
                                 format!(
                                     "Cannot apply offset {} to value {}",
@@ -189,18 +194,19 @@ pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
                             })?,
                         );
                     }
+                    timed_texts_lines.push(l);
                 }
-                timed_texts_lines.push(t);
+                LrcElement::Tag(Tag::Offset(v)) => {
+                    offset_ms = v;
+                    debug!("Applying offset {}", offset_ms);
+                }
+                _ => {}
             }
-            LrcLine::Tag(Tag::Offset(v)) => {
-                offset_ms = v;
-                debug!("Applying offset {}", offset_ms);
-            }
-            _ => {}
         }
     }
     Ok(LrcFile {
         metadata: Vec::new(),
+        lines: lrc_lines,
         timed_texts_lines,
     })
 }
@@ -208,6 +214,7 @@ pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LyricsTiming {
     pub time: Duration,              // time in song at which this occurs
+    pub duration: Duration,          // how long should this be displayed
     pub line_index: usize,           // index of line
     pub line_char_from_index: usize, // from this character in line
     pub line_char_to_index: usize,   // to this character in line
@@ -221,29 +228,32 @@ pub struct Lyrics {
 
 impl Lyrics {
     pub fn new(lrc_file: LrcFile) -> Self {
-        let mut lines = Vec::new();
         let mut timings = Vec::new();
 
         if !lrc_file.timed_texts_lines.is_empty() {
             timings.push(LyricsTiming {
-                time: Duration::from_secs(0),
+                time: Duration::ZERO,
+                duration: Duration::ZERO,
                 line_index: 0,
                 line_char_from_index: 0,
                 line_char_to_index: 0,
             });
-        }
 
-        for (line_index, timed_text_line) in (0usize..).zip(lrc_file.timed_texts_lines) {
-            lines.push(timed_text_line.text);
-            for timing in timed_text_line.timings {
+            for timing in lrc_file.timed_texts_lines {
+                if let Some(prev_timing) = timings.last_mut() {
+                    prev_timing.duration = timing.time - prev_timing.time;
+                }
+
                 timings.push(LyricsTiming {
                     time: timing.time,
-                    line_index,
+                    duration: Duration::ZERO,
+                    line_index: timing.line_index,
                     line_char_from_index: timing.line_char_from_index,
                     line_char_to_index: timing.line_char_to_index,
-                })
+                });
             }
         }
-        Lyrics { lines, timings }
+
+        Lyrics { lines: lrc_file.lines, timings }
     }
 }
