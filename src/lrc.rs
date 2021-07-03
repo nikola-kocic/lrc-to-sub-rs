@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
 
@@ -5,6 +6,7 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::usize;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -19,7 +21,7 @@ fn lines_from_file<P: AsRef<Path>>(filepath: P) -> Result<Vec<String>, String> {
 
 struct TimedLocation {
     time: Duration,
-    line_index: usize,
+    source_line_index: usize,
     line_char_from_index: usize, // from this character in line
     line_char_to_index: usize,   // to this character in line
 }
@@ -37,6 +39,12 @@ impl fmt::Debug for TimedLocation {
 }
 
 #[derive(Debug)]
+struct TextLine {
+    source_line_index: usize,
+    text: String,
+}
+
+#[derive(Debug)]
 enum Tag {
     Time(std::time::Duration),
     Offset(i64), // ms
@@ -45,7 +53,7 @@ enum Tag {
 
 #[derive(Debug)]
 enum LrcElement {
-    Text(String),
+    TextLine(TextLine),
     TimedLocation(TimedLocation),
     Tag(Tag),
 }
@@ -53,7 +61,7 @@ enum LrcElement {
 #[derive(Debug)]
 pub struct LrcFile {
     metadata: Vec<(String, String)>,
-    lines: Vec<String>,
+    lines: Vec<TextLine>,
     timed_texts_lines: Vec<TimedLocation>,
 }
 
@@ -118,11 +126,11 @@ fn parse_tag(tag_content: &str) -> Result<Tag, String> {
     }
 }
 
-fn parse_lrc_line(line: String, line_index: usize) -> Result<Vec<LrcElement>, String> {
+fn parse_lrc_line(line: &str, source_line_index: usize) -> Result<Vec<LrcElement>, String> {
     let mut line_elements = Vec::new();
     trace!("Parsing line {}", line);
     match line.chars().next() {
-        None => {},
+        None => {}
         Some('[') => {
             let mut current_text_index_in_line = 0;
             let parts = line.split('[');
@@ -143,7 +151,7 @@ fn parse_lrc_line(line: String, line_index: usize) -> Result<Vec<LrcElement>, St
                     Tag::Time(time) => {
                         let location = TimedLocation {
                             time,
-                            line_index,
+                            source_line_index,
                             line_char_from_index: current_text_index_in_line,
                             line_char_to_index: current_text_index_in_line + text_len,
                         };
@@ -155,7 +163,10 @@ fn parse_lrc_line(line: String, line_index: usize) -> Result<Vec<LrcElement>, St
             }
             if !texts.is_empty() {
                 let text = texts.join("");
-                line_elements.push(LrcElement::Text(text))
+                line_elements.push(LrcElement::TextLine(TextLine {
+                    source_line_index,
+                    text,
+                }))
             }
         }
         Some(c) => {
@@ -164,7 +175,7 @@ fn parse_lrc_line(line: String, line_index: usize) -> Result<Vec<LrcElement>, St
                 "Invalid lrc file format. First character in line: \"{}\" (hex bytes: {:x?})",
                 c,
                 c.encode_utf8(&mut buf).as_bytes()
-            ))
+            ));
         }
     }
     Ok(line_elements)
@@ -175,13 +186,11 @@ pub fn parse_lrc_file<P: AsRef<Path>>(filepath: P) -> Result<LrcFile, String> {
     let mut timed_texts_lines = Vec::new();
     let mut offset_ms = 0i64;
     let mut lrc_lines = Vec::new();
-    for line in text_lines {
-        let line_elements = parse_lrc_line(line, lrc_lines.len())?;
+    for (source_line_index, line) in text_lines.iter().enumerate() {
+        let line_elements = parse_lrc_line(line, source_line_index)?;
         for line_element in line_elements {
             match line_element {
-                LrcElement::Text(t) => {
-                    lrc_lines.push(t)
-                }
+                LrcElement::TextLine(t) => lrc_lines.push(t),
                 LrcElement::TimedLocation(mut l) => {
                     if offset_ms != 0 {
                         let prev_time_ms: i64 = l.time.as_millis().try_into().unwrap();
@@ -229,6 +238,8 @@ pub struct Lyrics {
 impl Lyrics {
     pub fn new(lrc_file: LrcFile) -> Self {
         let mut timings = Vec::new();
+        let mut src_lines_with_timings = HashSet::new();
+        let mut lrc_lines = Vec::new();
 
         if !lrc_file.timed_texts_lines.is_empty() {
             timings.push(LyricsTiming {
@@ -243,17 +254,27 @@ impl Lyrics {
                 if let Some(prev_timing) = timings.last_mut() {
                     prev_timing.duration = timing.time - prev_timing.time;
                 }
+                src_lines_with_timings.insert(timing.source_line_index);
 
                 timings.push(LyricsTiming {
                     time: timing.time,
                     duration: Duration::ZERO,
-                    line_index: timing.line_index,
+                    line_index: src_lines_with_timings.len() - 1,
                     line_char_from_index: timing.line_char_from_index,
                     line_char_to_index: timing.line_char_to_index,
                 });
             }
+
+            for line in lrc_file.lines {
+                if src_lines_with_timings.contains(&line.source_line_index) {
+                    lrc_lines.push(line.text);
+                }
+            }
         }
 
-        Lyrics { lines: lrc_file.lines, timings }
+        Lyrics {
+            lines: lrc_lines,
+            timings,
+        }
     }
 }

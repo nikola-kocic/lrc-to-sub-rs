@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use crate::formatters::format_duration;
 use crate::lrc::Lyrics;
+use crate::lrc::LyricsTiming;
 
 struct KaraokeLineSegment {
     duration: Duration,
@@ -40,11 +41,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
         let mut line_segments_strings = Vec::new();
         for line_segment in karaoke_line.line_segments {
             let duration_centisec = line_segment.duration.as_millis() / 10;
-            let line_segments_string = format!(
-                "{{\\k{}}}{}",
-                duration_centisec,
-                line_segment.text
-            );
+            let line_segments_string = format!("{{\\k{}}}{}", duration_centisec, line_segment.text);
             line_segments_strings.push(line_segments_string);
         }
         ass_lines.push(format!(
@@ -57,45 +54,51 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
     ass_lines
 }
 
-fn generate_karaoke_lines(lrc: &Lyrics) -> Vec<KaraokeLine> {
-    let mut current_line = lrc.timings[1].line_index;
-    let mut line_start = lrc.timings[1].time;
-    let mut line_end = lrc.timings[1].time;
+fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> KaraokeLine {
+    // println!("generate_karaoke_line");
     let mut karaoke_line_segments = Vec::new();
-    let mut karaoke_lines = Vec::new();
-
-    // println!("lines = \"{:?}\"", lrc.lines);
-    for timing in &lrc.timings {
-        if timing.line_index > current_line {
-            let line_display_start = line_start
-                .checked_sub(Duration::from_secs_f32(2.0))
-                .unwrap_or(Duration::ZERO);
-            karaoke_lines.push(KaraokeLine {
-                line_display_start,
-                line_display_end: line_end,
-                line_segments: karaoke_line_segments.split_off(0),
-            });
-            // Now set up next line
-            karaoke_line_segments.clear();
-            line_start = timing.time;
-            current_line = timing.line_index;
-            // println!("{}", &lrc.lines[current_line]);
-        }
-        line_end = timing.time;
-        // let duration = timing_next.time - line_end;
-        let line = &lrc.lines[current_line];
-        // println!("line = \"{}\"", line);
+    let line_start = timings_for_line.first().unwrap().time;
+    let line_end = timings_for_line.last().unwrap().time;
+    for timing in timings_for_line {
+        // println!("timing = {:?}", timing);
         if timing.line_char_from_index != timing.line_char_to_index {
-            // println!("{:?}", timing);
             let karaoke_segment = KaraokeLineSegment {
                 duration: timing.duration,
-                text: line.get(timing.line_char_from_index..timing.line_char_to_index)
-                    .unwrap().to_owned()
+                text: line
+                    .get(timing.line_char_from_index..timing.line_char_to_index)
+                    .unwrap()
+                    .to_owned(),
             };
             // println!("{}", karaoke_segment);
             karaoke_line_segments.push(karaoke_segment);
         }
     }
+    let line_display_start = line_start
+        .checked_sub(Duration::from_secs_f32(2.0))
+        .unwrap_or(Duration::ZERO);
+    KaraokeLine {
+        line_display_start,
+        line_display_end: line_end,
+        line_segments: karaoke_line_segments.split_off(0),
+    }
+}
+
+fn generate_karaoke_lines(lrc: &Lyrics) -> Vec<KaraokeLine> {
+    let mut karaoke_lines = Vec::new();
+    let mut current_line_index = 0;
+    let mut timings_index_start = 0;
+
+    while current_line_index < lrc.lines.len() {
+        let slice = &lrc.timings[timings_index_start..];
+        let pp = slice.partition_point(|t| t.line_index == current_line_index);
+        karaoke_lines.push(generate_karaoke_line(
+            &slice[..pp],
+            &lrc.lines[current_line_index],
+        ));
+        timings_index_start += pp;
+        current_line_index += 1;
+    }
+
     karaoke_lines
 }
 
