@@ -4,6 +4,22 @@ use crate::formatters::format_duration;
 use crate::lrc::Lyrics;
 
 pub fn f(lrc: &Lyrics) {
+    println!(r#"[Script Info]
+; This is a Sub Station Alpha v4 script.
+Title: 
+ScriptType: v4.00+
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+Collisions: Normal
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Jap,Arial,20,&H00FFFFFF,&H000088EF,&H00000000,&H00666666,-1,0,0,0,100,100,0,0,1,3,0,8,10,10,10,1
+Style: Eng,Arial,20,&H00FFFFFF,&H000088EF,&H00000000,&H00666666,-1,0,0,0,100,100,0,0,1,3,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"#);
+
     let mut current_line = lrc.timings[1].line_index;
     let mut line_start = lrc.timings[1].time;
     let mut line_end = lrc.timings[1].time;
