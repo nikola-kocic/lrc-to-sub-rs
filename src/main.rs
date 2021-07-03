@@ -2,7 +2,7 @@ mod formatters;
 mod lrc;
 mod subtitle_gen;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use structopt::StructOpt;
 
@@ -25,7 +25,7 @@ struct Opt {
     out: PathBuf,
 }
 
-fn run(lrc_filepath: PathBuf, out: PathBuf) -> Result<(), String> {
+fn run(lrc_filepath: &Path, out: &Path) -> Result<(), String> {
     let lrc_file = parse_lrc_file(&lrc_filepath)
         .map_err(|e| format!("Parsing lrc file {:?} failed: {}", lrc_filepath, e))?;
     let lyrics = Lyrics::new(lrc_file);
@@ -47,7 +47,7 @@ fn main() {
         error!("Lyrics path must be a file");
         return;
     }
-    if let Err(s) = run(lyrics_filepath, opt.out) {
+    if let Err(s) = run(&lyrics_filepath, &opt.out) {
         error!("{}", s);
     }
 }
