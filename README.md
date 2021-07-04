@@ -13,17 +13,26 @@ Resulting binary is at `./target/release/lrc-to-sub-rs`
 ## Usage
 ```
 USAGE:
-    lrc-to-sub-rs --lyrics <lyrics>
+    lrc-to-sub-rs [OPTIONS] --lyrics <lyrics> --out <out>
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -l, --lyrics <lyrics>    Lyrics file to use
+        --long-text-secondary-color <long-text-secondary-color>
+            Secondary color for long text, in AARRGGBB hex format [default: 00BF6C00]
+
+    -l, --lyrics <lyrics>                                          Lyrics file to use
+    -o, --out <out>                                                Subtitle file path to write output to
+        --primary-color <primary-color>
+            Primary color, in AARRGGBB hex format [default: 00FFFFFF]
+
+        --secondary-color <secondary-color>
+            Secondary color, in AARRGGBB hex format [default: 00EF8800]
 ```
 
 ## Examples
 ```
-lrc-to-sub-rs --lyrics '/home/user/Rick Astley - Never Gonna Give You Up.lrc'
+lrc-to-sub-rs --lyrics '/home/user/Rick Astley - Never Gonna Give You Up.lrc' --out sub.ass
 ```
