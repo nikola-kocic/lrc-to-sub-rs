@@ -1,6 +1,7 @@
 mod formatters;
 mod lrc;
 mod subtitle_gen;
+mod subtitle_style;
 
 use std::path::{Path, PathBuf};
 
@@ -11,6 +12,7 @@ use log::{debug, error, info, trace, warn};
 
 use crate::lrc::{parse_lrc_file, Lyrics};
 use crate::subtitle_gen::f;
+use crate::subtitle_style::SubtitleStyle;
 
 /// Show lyrics
 #[derive(StructOpt, Debug)]
@@ -23,14 +25,26 @@ struct Opt {
     /// Subtitle file path to write output to.
     #[structopt(short = "o", long, parse(from_os_str))]
     out: PathBuf,
+
+    /// Primary color, in AARRGGBB hex format
+    #[structopt(long, default_value = "00FFFFFF")]
+    primary_color: String,
+
+    /// Secondary color, in AARRGGBB hex format
+    #[structopt(long, default_value = "00EF8800")]
+    secondary_color: String,
+
+    /// Secondary color for long text, in AARRGGBB hex format
+    #[structopt(long, default_value = "00BF6C00")]
+    long_text_secondary_color: String,
 }
 
-fn run(lrc_filepath: &Path, out: &Path) -> Result<(), String> {
+fn run(lrc_filepath: &Path, out: &Path, style: &SubtitleStyle) -> Result<(), String> {
     let lrc_file = parse_lrc_file(&lrc_filepath)
         .map_err(|e| format!("Parsing lrc file {:?} failed: {}", lrc_filepath, e))?;
     let lyrics = Lyrics::new(lrc_file);
     // println!("{:?}", lyrics);
-    f(&lyrics, &out)?;
+    f(&lyrics, &out, style)?;
     Ok(())
 }
 
@@ -47,7 +61,12 @@ fn main() {
         error!("Lyrics path must be a file");
         return;
     }
-    if let Err(s) = run(&lyrics_filepath, &opt.out) {
+    let style = SubtitleStyle {
+        primary_color: opt.primary_color,
+        secondary_color: opt.secondary_color,
+        long_text_secondary_color: opt.long_text_secondary_color,
+    };
+    if let Err(s) = run(&lyrics_filepath, &opt.out, &style) {
         error!("{}", s);
     }
 }
