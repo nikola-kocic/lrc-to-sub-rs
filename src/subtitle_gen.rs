@@ -9,23 +9,29 @@ use crate::formatters::format_duration;
 use crate::lrc::Lyrics;
 use crate::lrc::LyricsTiming;
 
-const DEFAULT_PREDISPLAY_DURATION: Duration = Duration::from_secs(2);
+// TODO: Fix line disappearing too soon when there is no timestamp tag after the last segment in line
+// TODO: Don't output unneeded karaoke tag at the end of the line
 
-const ASS_CONTENT_PREFIX: &str = r#"[Script Info]
+const DEFAULT_PREDISPLAY_DURATION: Duration = Duration::from_secs(2);
+const LONG_KARAOKE_SEGMENT: Duration = Duration::from_millis(700);
+
+// For colors, hexadecimal byte order of this value is AABBGGRR.
+// Karaoke effects go from SecondaryColour to PrimaryColour.
+
+const DEFAULT_PRIMARY_COLOR: &str = "&H00FFFFFF";
+const DEFAULT_SECONDARY_COLOR: &str = "&H000088EF";
+const LONG_TEXT_SECONDARY_COLOR: &str = "&H00006CBF";
+
+const ASS_SCRIPT_INFO_HEADER: &str = "[Script Info]
 ; This is a Sub Station Alpha v4 script.
 Title: 
 ScriptType: v4.00+
 WrapStyle: 0
 ScaledBorderAndShadow: yes
-Collisions: Normal
+Collisions: Normal";
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Jap,Arial,20,&H00FFFFFF,&H000088EF,&H00000000,&H00666666,-1,0,0,0,100,100,0,0,1,3,0,8,10,10,10,1
-Style: Eng,Arial,20,&H00FFFFFF,&H000088EF,&H00000000,&H00666666,-1,0,0,0,100,100,0,0,1,3,0,2,10,10,10,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"#;
+const ASS_EVENTS_HEADER: &str = "[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text";
 
 #[derive(Debug)]
 struct KaraokeLineSegment {
@@ -40,16 +46,38 @@ struct KaraokeLine {
     line_segments: Vec<KaraokeLineSegment>,
 }
 
+fn get_ass_styles_header() -> String {
+    format!("[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style:   Jap,    Arial,       20,    {default_primary_color},      {default_secondary_color},    &H00000000, &H00666666,   -1,      0,         0,         0,    100,    100,       0,     0,           1,       3,      0,         8,      10,      10,      10,        1
+Style:   Eng,    Arial,       20,    {default_primary_color},      {default_secondary_color},    &H00000000, &H00666666,   -1,      0,         0,         0,    100,    100,       0,     0,           1,       3,      0,         2,      10,      10,      10,        1
+", default_primary_color=DEFAULT_PRIMARY_COLOR, default_secondary_color=DEFAULT_SECONDARY_COLOR)
+}
+
 fn format_text_duration(duration: &Duration, text: &str) -> String {
     let duration_centisec = duration.as_millis() / 10;
-    format!("{{\\k{}}}{}", duration_centisec, text)
+    if *duration < LONG_KARAOKE_SEGMENT {
+        format!(
+            "{{\\k{duration}}}{text}",
+            duration = duration_centisec,
+            text = text
+        )
+    } else {
+        format!(
+            "{{\\2c{override_secondary_color}\\K{duration}}}{text}{{\\2c{default_secondary_color}}}",
+            duration=duration_centisec,
+            text=text,
+            override_secondary_color=LONG_TEXT_SECONDARY_COLOR,
+            default_secondary_color=DEFAULT_SECONDARY_COLOR
+        )
+    }
 }
 
 fn generate_ass_file(karaoke_lines: Vec<KaraokeLine>) -> Vec<String> {
-    let mut ass_lines = ASS_CONTENT_PREFIX
-        .split('\n')
-        .map(String::from)
-        .collect::<Vec<String>>();
+    let mut ass_lines = Vec::new();
+    ass_lines.push(ASS_SCRIPT_INFO_HEADER.to_owned());
+    ass_lines.push(get_ass_styles_header());
+    ass_lines.push(ASS_EVENTS_HEADER.to_owned());
     for (i, karaoke_line) in karaoke_lines.iter().enumerate() {
         trace!("writing ASS file from = {:?}", karaoke_line);
         let mut line_segments_strings = Vec::new();
@@ -64,7 +92,7 @@ fn generate_ass_file(karaoke_lines: Vec<KaraokeLine>) -> Vec<String> {
             };
             std::cmp::min(first_min, DEFAULT_PREDISPLAY_DURATION)
         };
-        line_segments_strings.push(format_text_duration(&predisplay_duration, ""));
+        line_segments_strings.push(format_text_duration(&predisplay_duration, "— "));
 
         for line_segment in &karaoke_line.line_segments {
             let line_segments_string =
