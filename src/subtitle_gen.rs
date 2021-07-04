@@ -63,11 +63,10 @@ fn format_text_duration(duration: &Duration, text: &str) -> String {
         )
     } else {
         format!(
-            "{{\\2c{override_secondary_color}\\K{duration}}}{text}{{\\2c{default_secondary_color}}}",
+            "{{\\2c{override_secondary_color}\\K{duration}}}{text}{{\\2c}}",
             duration=duration_centisec,
             text=text,
-            override_secondary_color=LONG_TEXT_SECONDARY_COLOR,
-            default_secondary_color=DEFAULT_SECONDARY_COLOR
+            override_secondary_color=LONG_TEXT_SECONDARY_COLOR
         )
     }
 }
