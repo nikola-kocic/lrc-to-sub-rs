@@ -10,7 +10,6 @@ use crate::lrc::Lyrics;
 use crate::lrc::LyricsTiming;
 
 // TODO: Fix line disappearing too soon when there is no timestamp tag after the last segment in line
-// TODO: Don't output unneeded karaoke tag at the end of the line
 
 const DEFAULT_PREDISPLAY_DURATION: Duration = Duration::from_secs(2);
 const LONG_KARAOKE_SEGMENT: Duration = Duration::from_millis(700);
@@ -114,7 +113,7 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
     let line_start = timings_for_line.first().unwrap().time;
     let line_end = timings_for_line.last().unwrap().time;
 
-    for timing in timings_for_line {
+    for (i, timing) in timings_for_line.iter().enumerate() {
         trace!("timing = {:?}", timing);
         let karaoke_segment = KaraokeLineSegment {
             duration: timing.duration,
@@ -123,8 +122,12 @@ fn generate_karaoke_line(timings_for_line: &[LyricsTiming], line: &str) -> Karao
                 .unwrap()
                 .to_owned(),
         };
-        trace!("karaoke_segment = {:?}", karaoke_segment);
-        karaoke_line_segments.push(karaoke_segment);
+
+        // Don't output unneeded karaoke tag at the end of the line
+        if i < timings_for_line.len() - 1 || !karaoke_segment.text.is_empty() {
+            trace!("karaoke_segment = {:?}", karaoke_segment);
+            karaoke_line_segments.push(karaoke_segment);
+        }
     }
     KaraokeLine {
         line_start,
